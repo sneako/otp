@@ -184,9 +184,10 @@ connect1(Address, Port, Opts0, Timer) ->
 	Error -> Error
     end.
 
-try_connect([IP|IPs], Port, Opts, Timer, Mod, _) ->
+try_connect([IP|IPs]=AllIps, Port, Opts, Timer, Mod, _) ->
     Time = inet:timeout(Timer),
-    case Mod:connect(IP, Port, Opts, Time) of
+    ChosenIp = choose_ip(AllIps, Opts),
+    case Mod:connect(ChosenIp, Port, Opts, Time) of
 	{ok,S} -> {ok,S};
 	{error,einval} -> {error, einval};
 	{error,timeout} -> {error,timeout};
@@ -195,7 +196,27 @@ try_connect([IP|IPs], Port, Opts, Timer, Mod, _) ->
 try_connect([], _Port, _Opts, _Timer, _Mod, Err) ->
     Err.
 
-    
+choose_ip([IP], _Opts) ->
+  IP;
+choose_ip([IP|_]=IPs, Opts) ->
+  case proplists:get_value(ip_selection_strategy, Opts, first) of
+    random -> pop_random(IPs);
+    _ -> IP;
+  end.
+
+pop_random(List) ->
+  Len = length(List),
+  Idx = rand:uniform(Len-1),
+  [Chosen,Rest} = pop_at(List, Idx),
+  [Chosen|Rest].
+
+pop_at(List, Index) ->
+  do_pop_at(List, Index, []).
+
+do_pop_at([Head|Tail], 0,  Acc) ->
+  {Head, lists:reverse(Acc, Tail)};
+do_pop_at([Head|Tail], Index, Acc) ->
+  do_pop_at(Tail, Index-1, [Head|Acc]).
 
 %%
 %% Listen on a tcp port
